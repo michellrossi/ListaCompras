@@ -134,6 +134,10 @@
 
     <script>
         let items = JSON.parse(localStorage.getItem('smartlist_data')) || [];
+        
+        // Garante que a lista comece ordenada ao carregar
+        items.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
+
         let currentTab = 'list';
 
         const addForm = document.getElementById('add-form');
@@ -145,6 +149,8 @@
         const tableGrandTotal = document.getElementById('table-grand-total');
 
         function saveToStorage() {
+            // Ordena a lista alfabeticamente antes de salvar e renderizar
+            items.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
             localStorage.setItem('smartlist_data', JSON.stringify(items));
             render();
         }
@@ -215,12 +221,10 @@
         }
 
         function updateTotals() {
-            // Total only checked items for the footer
             const cartTotal = items.reduce((acc, item) => {
                 return item.checked ? acc + (item.price * item.quantity) : acc;
             }, 0);
             
-            // Total of everything in the list for the table
             const totalGeral = items.reduce((acc, item) => {
                 return acc + (item.price * item.quantity);
             }, 0);
@@ -328,7 +332,6 @@
             if (currentTab === 'table') renderTable();
         }
 
-        // Initial render
         render();
     </script>
 </body>
