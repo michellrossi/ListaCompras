@@ -437,8 +437,8 @@
         .tab-active { color: #10b981; border-bottom: 2px solid #10b981; }
         .modal-overlay { background-color: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); }
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        @keyframes slideUp { from { transform: translate(-50%, 100%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
-        .animate-slide-up { animation: slideUp 0.3s ease-out forwards; }
+        @keyframes slideIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .animate-slide-in { animation: slideIn 0.2s ease-out forwards; }
     </style>
 </head>
 <body class="min-h-screen pb-32 bg-slate-50 text-slate-900 selection:bg-emerald-100">
@@ -528,8 +528,8 @@
 
     <!-- Modais -->
     <!-- Gerenciador de Listas -->
-    <div id="modal-manager" class="fixed inset-0 z-[60] modal-overlay hidden flex items-end sm:items-center justify-center p-4">
-        <div class="bg-white w-full max-w-md rounded-t-[3rem] sm:rounded-[3rem] p-8 shadow-2xl animate-slide-up">
+    <div id="modal-manager" onclick="if(event.target === this) closeModal(this.id)" class="fixed inset-0 z-[60] modal-overlay hidden flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-[3rem] p-8 shadow-2xl animate-slide-in">
             <div class="flex justify-between items-center mb-8">
                 <h2 class="text-2xl font-black text-slate-800">As Suas Listas</h2>
                 <button onclick="closeModal('modal-manager')" class="text-slate-300 text-4xl leading-none hover:text-slate-500 transition-colors">&times;</button>
@@ -543,8 +543,8 @@
     </div>
 
     <!-- Renomear Lista -->
-    <div id="modal-rename" class="fixed inset-0 z-[70] modal-overlay hidden flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in-95 duration-200">
+    <div id="modal-rename" onclick="if(event.target === this) closeModal(this.id)" class="fixed inset-0 z-[70] modal-overlay hidden flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl animate-slide-in">
             <h2 class="text-xl font-black text-slate-800 mb-6">Renomear Lista</h2>
             <form onsubmit="confirmRenameAction(event)">
                 <input type="text" id="rename-list-input" placeholder="Novo nome..." class="w-full bg-slate-50 rounded-2xl px-5 py-4 mb-8 outline-none border border-transparent focus:border-emerald-500 transition-all font-medium">
@@ -557,8 +557,8 @@
     </div>
 
     <!-- Importar Itens -->
-    <div id="modal-mother" class="fixed inset-0 z-[60] modal-overlay hidden flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-md rounded-[3rem] p-8 shadow-2xl animate-in zoom-in-95 duration-300">
+    <div id="modal-mother" onclick="if(event.target === this) closeModal(this.id)" class="fixed inset-0 z-[60] modal-overlay hidden flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-[3rem] p-8 shadow-2xl animate-slide-in">
             <h2 class="text-2xl font-black text-slate-800 mb-2">Importar Itens</h2>
             <p class="text-slate-400 font-medium text-sm mb-8 italic">Selecione referências da sua Lista Mãe:</p>
             <div id="mother-items-container" class="space-y-3 max-h-[45vh] overflow-y-auto pr-1 no-scrollbar mb-10"></div>
