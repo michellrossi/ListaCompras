@@ -3,342 +3,495 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SmartList - Sua Lista de Compras</title>
+    <title>SmartList Pro Cloud</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Importação da fonte Plus Jakarta Sans -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&display=swap" rel="stylesheet">
+    
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, collection, onSnapshot, updateDoc, deleteDoc, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Configurações do Firebase fornecidas pelo utilizador
+        const firebaseConfig = {
+            apiKey: "AIzaSyCCnAhTDVC9lipV_PoU2RCmUSXAFCOPoSE",
+            authDomain: "smarlist-9ddee.firebaseapp.com",
+            projectId: "smarlist-9ddee",
+            storageBucket: "smarlist-9ddee.firebasestorage.app",
+            messagingSenderId: "847570047834",
+            appId: "1:847570047834:web:c9616ef793a572ce1e9963"
+        };
+
+        // Inicializa o Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        
+        // ID da aplicação para estrutura de pastas no Firestore
+        const appId = "smarlist-9ddee";
+
+        // Estado Global da Aplicação
+        let lists = [];
+        let currentListId = null;
+        let user = null;
+
+        // Referências do DOM
+        const listContainer = document.getElementById('shopping-list');
+        const tableBody = document.getElementById('table-body');
+        const grandTotalFooter = document.getElementById('grand-total-footer');
+        const currentListNameEl = document.getElementById('current-list-name');
+        const setupInstructions = document.getElementById('setup-instructions');
+        const mainContent = document.getElementById('main-content');
+
+        // --- Gestão de Autenticação ---
+        async function initAuth() {
+            try {
+                // Tenta entrar anonimamente para garantir persistência na nuvem
+                await signInAnonymously(auth);
+            } catch (error) {
+                console.error("Erro na autenticação Firebase:", error);
+                // Se o erro for 'auth/configuration-not-found', mostramos o guia de configuração
+                if (error.code === 'auth/configuration-not-found' || error.message.includes('auth/configuration-not-found')) {
+                    mainContent.classList.add('opacity-20', 'pointer-events-none');
+                    setupInstructions.classList.remove('hidden');
+                }
+            }
+        }
+
+        onAuthStateChanged(auth, (u) => {
+            user = u;
+            if (user) {
+                // Se logado com sucesso, esconde instruções e inicia sincronização
+                setupInstructions.classList.add('hidden');
+                mainContent.classList.remove('opacity-20', 'pointer-events-none');
+                setupRealtimeSync();
+            }
+        });
+
+        // --- Sincronização em Tempo Real ---
+        function setupRealtimeSync() {
+            if (!user) return;
+
+            // Caminho obrigatório: /artifacts/{appId}/public/data/{collectionName}
+            const listsCollection = collection(db, 'artifacts', appId, 'public', 'data', 'shoppingLists');
+            
+            onSnapshot(listsCollection, (snapshot) => {
+                lists = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                
+                if (lists.length === 0) {
+                    createNewList("Minha Primeira Lista", true);
+                } else {
+                    if (!currentListId) currentListId = lists[0].id;
+                    render();
+                    renderManager();
+                }
+            }, (error) => {
+                console.error("Erro no Firestore Snapshot:", error);
+                alert("Erro ao ler dados: Verifique se as Regras de Segurança do Firestore estão configuradas para permitir leitura/escrita pública no caminho do projeto.");
+            });
+        }
+
+        // --- Operações de Dados ---
+        async function createNewList(name, isMother = false) {
+            if (!user) return;
+            try {
+                const listsCollection = collection(db, 'artifacts', appId, 'public', 'data', 'shoppingLists');
+                const newDoc = await addDoc(listsCollection, {
+                    name,
+                    items: [],
+                    isMother,
+                    createdAt: Date.now()
+                });
+                currentListId = newDoc.id;
+            } catch (e) {
+                console.error("Erro ao criar lista:", e);
+            }
+        }
+
+        async function updateCurrentListItems(newItems) {
+            if (!user || !currentListId) return;
+            const listDoc = doc(db, 'artifacts', appId, 'public', 'data', 'shoppingLists', currentListId);
+            await updateDoc(listDoc, { items: newItems });
+        }
+
+        async function setAsMother(id) {
+            if (!user) return;
+            for (const l of lists) {
+                const listDoc = doc(db, 'artifacts', appId, 'public', 'data', 'shoppingLists', l.id);
+                await updateDoc(listDoc, { isMother: l.id === id });
+            }
+        }
+
+        async function deleteList(id) {
+            if (lists.length <= 1) return alert("Precisa de pelo menos uma lista.");
+            if (confirm("Eliminar esta lista permanentemente?")) {
+                const listDoc = doc(db, 'artifacts', appId, 'public', 'data', 'shoppingLists', id);
+                await deleteDoc(listDoc);
+                if (currentListId === id) currentListId = lists.find(l => l.id !== id).id;
+            }
+        }
+
+        // --- Lógica de Interface ---
+        window.switchTab = (tab) => {
+            window.currentTab = tab;
+            document.getElementById('view-list').classList.toggle('hidden', tab !== 'list');
+            document.getElementById('view-table').classList.toggle('hidden', tab !== 'table');
+            document.getElementById('tab-list').classList.toggle('tab-active', tab === 'list');
+            document.getElementById('tab-table').classList.toggle('tab-active', tab === 'table');
+            render();
+        };
+
+        window.openManager = () => {
+            document.getElementById('modal-manager').classList.remove('hidden');
+            renderManager();
+        };
+
+        window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
+
+        // --- Renderização de Listas e Tabelas ---
+        function renderManager() {
+            const container = document.getElementById('manager-list-container');
+            if (!container) return;
+            container.innerHTML = '';
+            lists.forEach(l => {
+                const isActive = l.id === currentListId;
+                const div = document.createElement('div');
+                div.className = `flex items-center gap-3 p-4 rounded-2xl border transition-all ${isActive ? 'border-emerald-500 bg-emerald-50 shadow-inner' : 'border-slate-100 bg-white'}`;
+                div.innerHTML = `
+                    <div class="flex-1 cursor-pointer" onclick="selectList('${l.id}')">
+                        <p class="font-bold text-slate-800">${l.name} ${l.isMother ? '⭐' : ''}</p>
+                        <p class="text-xs text-slate-500">${l.items?.length || 0} itens registados</p>
+                    </div>
+                    <button onclick="setMotherList('${l.id}')" class="p-2.5 rounded-xl ${l.isMother ? 'text-amber-500 bg-amber-50' : 'text-slate-300 hover:bg-slate-50'}">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="${l.isMother ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                    </button>
+                    <button onclick="deleteListAction('${l.id}')" class="p-2.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    </button>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function render() {
+            const list = lists.find(l => l.id === currentListId);
+            if (!list) return;
+
+            currentListNameEl.innerText = list.name + (list.isMother ? ' (Lista Mãe)' : '');
+            const items = list.items || [];
+
+            // Ordenação: Itens não marcados em cima, marcados em baixo. Ambos em ordem alfabética.
+            items.sort((a, b) => {
+                if (a.checked !== b.checked) return a.checked ? 1 : -1;
+                return a.name.localeCompare(b.name, 'pt-PT');
+            });
+
+            if (window.currentTab === 'list' || !window.currentTab) {
+                listContainer.innerHTML = '';
+                items.forEach(item => {
+                    const card = document.createElement('div');
+                    card.className = `item-card p-4 rounded-2xl border flex flex-col gap-3 ${item.checked ? 'checked' : 'bg-white border-slate-200 shadow-sm'}`;
+                    card.innerHTML = `
+                        <div class="flex items-center gap-3">
+                            <button onclick="toggleItem('${item.id}')" class="w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all ${item.checked ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300'}">
+                                ${item.checked ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4"><polyline points="20 6 9 17 4 12"></polyline></svg>' : ''}
+                            </button>
+                            <div class="flex-1">
+                                <p class="text-sm font-semibold text-slate-800 ${item.checked ? 'line-through text-slate-400' : ''}">${item.name}</p>
+                                <input type="text" value="${item.format || ''}" onchange="updateItemField('${item.id}', 'format', this.value)" placeholder="Formato (ex: 1kg, 500ml)" class="text-[10px] bg-transparent border-none p-0 outline-none text-slate-400 w-full font-bold uppercase placeholder:text-slate-200">
+                            </div>
+                            <button onclick="removeItem('${item.id}')" class="text-slate-300 hover:text-red-400 p-1"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
+                        </div>
+                        ${item.checked ? `
+                            <div class="flex items-center gap-4 pt-3 border-t border-slate-200/50">
+                                <div class="flex-1">
+                                    <label class="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Preço Unit.</label>
+                                    <input type="number" step="0.01" value="${item.price || ''}" onchange="updateItemField('${item.id}', 'price', this.value)" class="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-sm outline-none focus:border-emerald-400">
+                                </div>
+                                <div class="w-20">
+                                    <label class="text-[9px] font-black text-slate-400 uppercase tracking-tighter text-center block">Qtd</label>
+                                    <input type="number" value="${item.quantity || 1}" onchange="updateItemField('${item.id}', 'quantity', this.value)" class="w-full bg-white border border-slate-200 rounded-xl px-2 py-1.5 text-sm text-center outline-none focus:border-emerald-400">
+                                </div>
+                                <div class="text-right min-w-[80px]">
+                                    <label class="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Subtotal</label>
+                                    <p class="text-sm font-black text-slate-800">€ ${((item.price || 0) * (item.quantity || 1)).toLocaleString('pt-PT', { minimumFractionDigits: 2 })}</p>
+                                </div>
+                            </div>
+                        ` : ''}
+                    `;
+                    listContainer.appendChild(card);
+                });
+            } else {
+                tableBody.innerHTML = '';
+                items.forEach(item => {
+                    const tr = document.createElement('tr');
+                    tr.className = `transition-colors ${item.checked ? 'bg-emerald-50/20' : ''}`;
+                    tr.innerHTML = `
+                        <td class="px-4 py-4 text-sm font-medium ${item.checked ? 'text-slate-400 italic' : 'text-slate-800'}">${item.name}</td>
+                        <td class="px-4 py-4 text-[10px] text-slate-400 font-bold uppercase">${item.format || '-'}</td>
+                        <td class="px-4 py-4 text-sm text-right text-slate-600 font-mono">€ ${(item.price || 0).toFixed(2)}</td>
+                        <td class="px-4 py-4 text-sm text-center text-slate-600">${item.quantity || 1}</td>
+                        <td class="px-4 py-4 text-sm font-bold text-right text-slate-900 font-mono">€ ${((item.price || 0) * (item.quantity || 1)).toFixed(2)}</td>
+                    `;
+                    tableBody.appendChild(tr);
+                });
+            }
+
+            const total = items.reduce((acc, i) => i.checked ? acc + ((i.price || 0) * (i.quantity || 1)) : acc, 0);
+            grandTotalFooter.innerText = `€ ${total.toLocaleString('pt-PT', { minimumFractionDigits: 2 })}`;
+        }
+
+        // --- Funções Auxiliares de Dados ---
+        window.addItemAction = async (e) => {
+            e.preventDefault();
+            const input = document.getElementById('item-input');
+            const name = input.value.trim();
+            if (name && currentListId) {
+                const list = lists.find(l => l.id === currentListId);
+                const newItems = [...(list.items || []), { id: Date.now().toString() + Math.random(), name, price: 0, quantity: 1, format: '', checked: false }];
+                input.value = '';
+                await updateCurrentListItems(newItems);
+            }
+        };
+
+        window.toggleItem = async (itemId) => {
+            const list = lists.find(l => l.id === currentListId);
+            const newItems = list.items.map(i => i.id === itemId ? { ...i, checked: !i.checked } : i);
+            await updateCurrentListItems(newItems);
+        };
+
+        window.updateItemField = async (itemId, field, value) => {
+            const list = lists.find(l => l.id === currentListId);
+            const newItems = list.items.map(i => {
+                if (i.id === itemId) {
+                    const updated = { ...i };
+                    if (field === 'price') updated.price = parseFloat(value) || 0;
+                    else if (field === 'quantity') updated.quantity = parseInt(value) || 1;
+                    else updated[field] = value;
+                    return updated;
+                }
+                return i;
+            });
+            await updateCurrentListItems(newItems);
+        };
+
+        window.removeItem = async (itemId) => {
+            const list = lists.find(l => l.id === currentListId);
+            const newItems = list.items.filter(i => i.id !== itemId);
+            await updateCurrentListItems(newItems);
+        };
+
+        window.selectList = (id) => {
+            currentListId = id;
+            window.closeModal('modal-manager');
+            render();
+        };
+
+        window.setMotherList = async (id) => await setAsMother(id);
+        window.deleteListAction = async (id) => await deleteList(id);
+
+        window.createNewListAction = async (e) => {
+            e.preventDefault();
+            const input = document.getElementById('new-list-name');
+            const name = input.value.trim();
+            if (name) {
+                await createNewList(name);
+                input.value = '';
+                window.closeModal('modal-manager');
+            }
+        };
+
+        window.openMotherImportAction = () => {
+            const mother = lists.find(l => l.isMother);
+            const current = lists.find(l => l.id === currentListId);
+            if (!mother) return alert("Defina uma lista como Mãe (⭐) primeiro no gerenciador de listas.");
+            if (mother.id === current.id) return alert("Já está a visualizar a Lista Mãe.");
+            
+            document.getElementById('modal-mother').classList.remove('hidden');
+            const container = document.getElementById('mother-items-container');
+            container.innerHTML = '';
+            window.importSelection = [];
+
+            mother.items.forEach(item => {
+                const alreadyHas = current.items.some(i => i.name.toLowerCase() === item.name.toLowerCase());
+                const div = document.createElement('div');
+                div.className = `flex items-center justify-between p-4 rounded-2xl border ${alreadyHas ? 'bg-slate-50 opacity-40' : 'bg-white border-slate-100 hover:border-emerald-200'}`;
+                div.innerHTML = `
+                    <span class="text-sm font-semibold">${item.name} <small class="text-slate-400 font-bold ml-1">${item.format || ''}</small></span>
+                    ${alreadyHas ? '<span class="text-[10px] font-black text-slate-400 uppercase tracking-tighter">No Carrinho</span>' : 
+                    `<input type="checkbox" onchange="updateImportSelection('${item.id}', this.checked)" class="w-6 h-6 accent-emerald-500 rounded-lg cursor-pointer">`}
+                `;
+                container.appendChild(div);
+            });
+        };
+
+        window.updateImportSelection = (itemId, checked) => {
+            if (!window.importSelection) window.importSelection = [];
+            const mother = lists.find(l => l.isMother);
+            const item = mother.items.find(i => i.id === itemId);
+            if (checked) window.importSelection.push(item);
+            else window.importSelection = window.importSelection.filter(i => i.id !== itemId);
+        };
+
+        window.confirmImportAction = async () => {
+            const current = lists.find(l => l.id === currentListId);
+            const newItems = [...(current.items || [])];
+            (window.importSelection || []).forEach(item => {
+                newItems.push({ 
+                    ...item, 
+                    id: Date.now().toString() + Math.random(), 
+                    checked: false, 
+                    price: 0, 
+                    quantity: 1 
+                });
+            });
+            await updateCurrentListItems(newItems);
+            window.closeModal('modal-mother');
+        };
+
+        window.clearCurrentListAction = async () => {
+            if (confirm("Deseja realmente esvaziar esta lista inteira?")) await updateCurrentListItems([]);
+        };
+
+        // Inicia o processo de autenticação
+        initAuth();
+
+    </script>
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f8fafc;
+        body { 
+            -webkit-tap-highlight-color: transparent; 
+            font-family: 'Plus Jakarta Sans', sans-serif;
         }
-        .item-card {
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .checked {
-            background-color: #f1f5f9;
-            border-color: #e2e8f0;
-        }
-        input::-webkit-outer-spin-button,
-        input::-webkit-inner-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
-        .tab-active {
-            color: #10b981;
-            border-bottom: 2px solid #10b981;
-        }
-        /* Custom scrollbar for table */
-        .table-container::-webkit-scrollbar {
-            height: 6px;
-        }
-        .table-container::-webkit-scrollbar-thumb {
-            background: #e2e8f0;
-            border-radius: 10px;
-        }
+        .item-card { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .checked { background-color: #f8fafc; border-color: #e2e8f0; }
+        .tab-active { color: #10b981; border-bottom: 2px solid #10b981; }
+        .modal-overlay { background-color: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        /* Animações simples */
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .animate-slide-up { animation: slideUp 0.3s ease-out; }
     </style>
 </head>
-<body class="min-h-screen pb-24">
+<body class="min-h-screen pb-32 bg-slate-50 text-slate-900 selection:bg-emerald-100">
 
-    <div class="max-w-2xl mx-auto px-4 py-6">
-        <!-- Header -->
-        <header class="mb-6 text-center">
-            <h1 class="text-3xl font-bold text-slate-800">SmartList</h1>
-            <p class="text-slate-500 text-sm italic">Organize suas compras com precisão</p>
+    <!-- Guia de Erro de Configuração (Firebase) -->
+    <div id="setup-instructions" class="hidden fixed inset-0 z-[200] bg-white flex items-center justify-center p-6 text-center">
+        <div class="max-w-sm">
+            <div class="bg-red-50 text-red-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            </div>
+            <h2 class="text-2xl font-black text-slate-800 mb-4">Ação Necessária</h2>
+            <p class="text-slate-500 mb-8 leading-relaxed">O recurso de <b>Login Anónimo</b> não está ativo no seu console Firebase. Para corrigir:</p>
+            <ol class="text-left text-sm text-slate-600 space-y-4 mb-10 bg-slate-50 p-6 rounded-3xl">
+                <li>1. Aceda ao <b>Console do Firebase</b>.</li>
+                <li>2. Vá a <b>Authentication</b> no menu lateral.</li>
+                <li>3. Clique no separador <b>Sign-in method</b>.</li>
+                <li>4. Clique em <b>Adicionar novo provedor</b>.</li>
+                <li>5. Escolha <b>Anónimo</b> e clique em <b>Ativar/Guardar</b>.</li>
+            </ol>
+            <p class="text-[10px] text-slate-400 uppercase font-black tracking-widest">Após ativar, atualize esta página.</p>
+        </div>
+    </div>
+
+    <!-- Conteúdo Principal -->
+    <div id="main-content" class="max-w-2xl mx-auto px-4 py-6 transition-opacity duration-500">
+        <header class="flex justify-between items-center mb-6">
+            <div class="flex-1 overflow-hidden pr-4">
+                <h1 class="text-2xl font-black text-slate-800 tracking-tight">SmartList Pro</h1>
+                <p id="current-list-name" class="text-emerald-600 font-bold text-sm italic truncate">A ligar à nuvem...</p>
+            </div>
+            <button onclick="openManager()" class="bg-white border border-slate-200 p-3 rounded-2xl shadow-sm hover:bg-slate-50 transition-all hover:scale-105 active:scale-95 shrink-0">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-slate-700"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+            </button>
         </header>
 
-        <!-- Navigation Tabs -->
-        <div class="flex border-b border-slate-200 mb-6">
-            <button onclick="switchTab('list')" id="tab-list" class="flex-1 py-3 text-sm font-semibold text-slate-500 transition-all tab-active">
-                Lista de Itens
-            </button>
-            <button onclick="switchTab('table')" id="tab-table" class="flex-1 py-3 text-sm font-semibold text-slate-500 transition-all">
-                Visão Planilha
-            </button>
+        <!-- Navegação -->
+        <div class="flex border-b border-slate-200 mb-8 sticky top-0 bg-slate-50/90 backdrop-blur-md z-40">
+            <button onclick="switchTab('list')" id="tab-list" class="flex-1 py-4 text-sm font-black text-slate-400 transition-all tab-active uppercase tracking-widest">Lista</button>
+            <button onclick="switchTab('table')" id="tab-table" class="flex-1 py-4 text-sm font-black text-slate-400 transition-all uppercase tracking-widest">Planilha</button>
         </div>
 
-        <!-- View 1: List View -->
+        <!-- Visualização de Itens -->
         <div id="view-list">
-            <!-- Input Area -->
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 mb-6">
-                <form id="add-form" class="flex gap-2">
-                    <input 
-                        type="text" 
-                        id="item-input" 
-                        placeholder="Adicionar novo produto..." 
-                        class="flex-1 bg-slate-50 border-none focus:ring-2 focus:ring-emerald-500 rounded-xl px-4 py-3 text-slate-700 outline-none transition-all"
-                        required
-                    >
-                    <button 
-                        type="submit" 
-                        class="bg-emerald-500 hover:bg-emerald-600 text-white p-3 rounded-xl transition-colors shadow-lg shadow-emerald-200"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                    </button>
-                </form>
+            <div class="flex gap-2 mb-8">
+                <div class="flex-1 bg-white rounded-[1.5rem] shadow-sm border border-slate-200 p-2">
+                    <form onsubmit="addItemAction(event)" class="flex gap-2">
+                        <input type="text" id="item-input" placeholder="Adicionar novo item..." class="flex-1 border-none focus:ring-0 px-4 py-2.5 text-slate-700 font-medium outline-none bg-transparent placeholder:text-slate-300">
+                        <button type="submit" class="bg-emerald-500 text-white p-3 rounded-2xl hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100 active:scale-90">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        </button>
+                    </form>
+                </div>
+                <button onclick="openMotherImportAction()" title="Importar da Lista Mãe" class="bg-white border border-slate-200 p-4 rounded-[1.5rem] shadow-sm text-slate-600 hover:bg-slate-50 transition-colors active:scale-90">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                </button>
             </div>
-
-            <div id="shopping-list" class="space-y-3">
-                <!-- Items list -->
+            <div id="shopping-list" class="space-y-4">
+                <!-- Itens dinâmicos -->
             </div>
         </div>
 
-        <!-- View 2: Table View -->
+        <!-- Visualização de Planilha -->
         <div id="view-table" class="hidden">
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div class="table-container overflow-x-auto">
+            <div class="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto no-scrollbar">
                     <table class="w-full text-left border-collapse">
                         <thead>
-                            <tr class="bg-slate-50 border-b border-slate-200">
-                                <th class="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Status</th>
-                                <th class="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider">Item</th>
-                                <th class="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">Preço</th>
-                                <th class="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider text-center">Qtd</th>
-                                <th class="px-4 py-3 text-xs font-bold text-slate-400 uppercase tracking-wider text-right">Total</th>
+                            <tr class="bg-slate-50 border-b border-slate-200 text-[10px] text-slate-400 uppercase font-black tracking-widest">
+                                <th class="px-6 py-5">Produto</th>
+                                <th class="px-6 py-5">Emb.</th>
+                                <th class="px-6 py-5 text-right">Preço</th>
+                                <th class="px-6 py-5 text-center">Qtd</th>
+                                <th class="px-6 py-5 text-right">Total</th>
                             </tr>
                         </thead>
                         <tbody id="table-body" class="divide-y divide-slate-100">
-                            <!-- Table rows -->
+                            <!-- Linhas dinâmicas -->
                         </tbody>
-                        <tfoot>
-                            <tr class="bg-slate-50 font-bold">
-                                <td colspan="4" class="px-4 py-4 text-sm text-slate-600 text-right">Total Geral:</td>
-                                <td id="table-grand-total" class="px-4 py-4 text-sm text-emerald-600 text-right font-bold">R$ 0,00</td>
-                            </tr>
-                        </tfoot>
                     </table>
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- Empty State -->
-        <div id="empty-state" class="text-center py-12 hidden">
-            <div class="bg-slate-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
-                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+    <!-- Modais -->
+    <div id="modal-manager" class="fixed inset-0 z-[60] modal-overlay hidden flex items-end sm:items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-t-[3rem] sm:rounded-[3rem] p-8 shadow-2xl animate-slide-up">
+            <div class="flex justify-between items-center mb-8">
+                <h2 class="text-2xl font-black text-slate-800">As Suas Listas</h2>
+                <button onclick="closeModal('modal-manager')" class="text-slate-300 text-4xl leading-none hover:text-slate-500 transition-colors">&times;</button>
             </div>
-            <p class="text-slate-500">Sua lista está limpa.</p>
+            <div id="manager-list-container" class="space-y-4 mb-8 max-h-[50vh] overflow-y-auto pr-2 no-scrollbar"></div>
+            <form onsubmit="createNewListAction(event)" class="flex gap-3 pt-8 border-t border-slate-100">
+                <input type="text" id="new-list-name" placeholder="Nome da lista..." class="flex-1 bg-slate-50 rounded-[1.5rem] px-5 py-4 outline-none border border-transparent focus:border-emerald-500 transition-all font-medium">
+                <button type="submit" class="bg-emerald-500 text-white px-6 py-4 rounded-[1.5rem] font-black shadow-xl shadow-emerald-100">CRIAR</button>
+            </form>
         </div>
     </div>
 
-    <!-- Sticky Total Bar -->
-    <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 shadow-[0_-4px_10px_rgba(0,0,0,0.03)] z-50">
+    <div id="modal-mother" class="fixed inset-0 z-[60] modal-overlay hidden flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-[3rem] p-8 shadow-2xl animate-in zoom-in-95 duration-300">
+            <h2 class="text-2xl font-black text-slate-800 mb-2">Importar Itens</h2>
+            <p class="text-slate-400 font-medium text-sm mb-8 italic">Selecione referências da sua Lista Mãe:</p>
+            <div id="mother-items-container" class="space-y-3 max-h-[45vh] overflow-y-auto pr-1 no-scrollbar mb-10"></div>
+            <div class="flex gap-4">
+                <button onclick="closeModal('modal-mother')" class="flex-1 py-4 rounded-[1.5rem] bg-slate-100 font-black text-slate-500 hover:bg-slate-200 transition-colors">VOLTAR</button>
+                <button onclick="confirmImportAction()" class="flex-1 py-4 rounded-[1.5rem] bg-emerald-500 font-black text-white shadow-xl shadow-emerald-200 hover:bg-emerald-600 transition-colors">ADICIONAR</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Barra de Total Fixa -->
+    <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 p-6 shadow-[0_-15px_40px_-10px_rgba(0,0,0,0.1)] z-50">
         <div class="max-w-2xl mx-auto flex justify-between items-center">
             <div>
-                <p class="text-[10px] text-slate-400 uppercase font-bold tracking-widest mb-0.5">No Carrinho</p>
-                <p class="text-2xl font-bold text-slate-800" id="grand-total-footer">R$ 0,00</p>
+                <p class="text-[10px] text-slate-400 uppercase font-black tracking-[0.25em] mb-1">Total no Carrinho</p>
+                <p class="text-4xl font-black text-slate-800 tabular-nums" id="grand-total-footer">€ 0,00</p>
             </div>
-            <button onclick="clearAll()" class="text-xs font-semibold text-red-500 hover:bg-red-50 border border-transparent hover:border-red-100 px-4 py-2 rounded-xl transition-all">
-                Resetar Lista
-            </button>
+            <button onclick="clearCurrentListAction()" class="text-xs font-black text-red-400 px-6 py-4 hover:bg-red-50 rounded-[1.2rem] transition-colors border-2 border-transparent hover:border-red-100 uppercase tracking-widest">Esvaziar</button>
         </div>
     </div>
-
-    <script>
-        let items = JSON.parse(localStorage.getItem('smartlist_data')) || [];
-        let currentTab = 'list';
-
-        const addForm = document.getElementById('add-form');
-        const itemInput = document.getElementById('item-input');
-        const listContainer = document.getElementById('shopping-list');
-        const tableBody = document.getElementById('table-body');
-        const emptyState = document.getElementById('empty-state');
-        const grandTotalFooter = document.getElementById('grand-total-footer');
-        const tableGrandTotal = document.getElementById('table-grand-total');
-
-        // Função principal de ordenação inteligente
-        function sortItems() {
-            items.sort((a, b) => {
-                // 1º Critério: Checked status (falso vem antes de verdadeiro)
-                if (a.checked !== b.checked) {
-                    return a.checked ? 1 : -1;
-                }
-                // 2º Critério: Ordem alfabética (dentro dos grupos)
-                return a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' });
-            });
-        }
-
-        function saveToStorage() {
-            sortItems();
-            localStorage.setItem('smartlist_data', JSON.stringify(items));
-            render();
-        }
-
-        function switchTab(tab) {
-            currentTab = tab;
-            const viewList = document.getElementById('view-list');
-            const viewTable = document.getElementById('view-table');
-            const tabListBtn = document.getElementById('tab-list');
-            const tabTableBtn = document.getElementById('tab-table');
-
-            if (tab === 'list') {
-                viewList.classList.remove('hidden');
-                viewTable.classList.add('hidden');
-                tabListBtn.classList.add('tab-active');
-                tabTableBtn.classList.remove('tab-active');
-            } else {
-                viewList.classList.add('hidden');
-                viewTable.classList.remove('hidden');
-                tabListBtn.classList.remove('tab-active');
-                tabTableBtn.classList.add('tab-active');
-                renderTable();
-            }
-        }
-
-        addForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const name = itemInput.value.trim();
-            if (name) {
-                const newItem = {
-                    id: Date.now(),
-                    name: name,
-                    price: 0,
-                    quantity: 1,
-                    checked: false
-                };
-                items.push(newItem);
-                itemInput.value = '';
-                saveToStorage();
-            }
-        });
-
-        function removeItem(id) {
-            items = items.filter(item => item.id !== id);
-            saveToStorage();
-        }
-
-        function toggleItem(id) {
-            const index = items.findIndex(item => item.id === id);
-            items[index].checked = !items[index].checked;
-            saveToStorage();
-        }
-
-        function updatePrice(id, val) {
-            const index = items.findIndex(item => item.id === id);
-            items[index].price = parseFloat(val) || 0;
-            updateTotals();
-            localStorage.setItem('smartlist_data', JSON.stringify(items));
-            if (currentTab === 'table') renderTable();
-        }
-
-        function updateQty(id, val) {
-            const index = items.findIndex(item => item.id === id);
-            items[index].quantity = parseInt(val) || 0;
-            updateTotals();
-            localStorage.setItem('smartlist_data', JSON.stringify(items));
-            if (currentTab === 'table') renderTable();
-        }
-
-        function updateTotals() {
-            const cartTotal = items.reduce((acc, item) => {
-                return item.checked ? acc + (item.price * item.quantity) : acc;
-            }, 0);
-            
-            const totalGeral = items.reduce((acc, item) => {
-                return acc + (item.price * item.quantity);
-            }, 0);
-
-            grandTotalFooter.innerText = `R$ ${cartTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
-            if (tableGrandTotal) tableGrandTotal.innerText = `R$ ${totalGeral.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
-        }
-
-        function clearAll() {
-            if (confirm('Deseja apagar todos os itens da lista?')) {
-                items = [];
-                saveToStorage();
-            }
-        }
-
-        function renderTable() {
-            tableBody.innerHTML = '';
-            items.forEach(item => {
-                const tr = document.createElement('tr');
-                tr.className = "hover:bg-slate-50 transition-colors";
-                tr.innerHTML = `
-                    <td class="px-4 py-3 text-center">
-                        <span class="inline-block w-2 h-2 rounded-full ${item.checked ? 'bg-emerald-500' : 'bg-slate-300'}"></span>
-                    </td>
-                    <td class="px-4 py-3 text-sm text-slate-700 font-medium ${item.checked ? 'text-slate-400 italic' : ''}">${item.name}</td>
-                    <td class="px-4 py-3 text-sm text-slate-600 text-right">R$ ${item.price.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
-                    <td class="px-4 py-3 text-sm text-slate-600 text-center">${item.quantity}</td>
-                    <td class="px-4 py-3 text-sm font-bold text-slate-800 text-right">R$ ${(item.price * item.quantity).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
-                `;
-                tableBody.appendChild(tr);
-            });
-            updateTotals();
-        }
-
-        function render() {
-            if (items.length === 0) {
-                listContainer.innerHTML = '';
-                emptyState.classList.remove('hidden');
-                updateTotals();
-                if (currentTab === 'table') renderTable();
-                return;
-            }
-
-            emptyState.classList.add('hidden');
-            listContainer.innerHTML = '';
-
-            items.forEach(item => {
-                const card = document.createElement('div');
-                card.className = `item-card group flex flex-col bg-white border border-slate-200 rounded-2xl p-4 shadow-sm ${item.checked ? 'checked' : ''}`;
-                
-                let content = `
-                    <div class="flex items-center gap-3">
-                        <button onclick="toggleItem(${item.id})" class="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${item.checked ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300'}">
-                            ${item.checked ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>' : ''}
-                        </button>
-                        <span class="flex-1 text-slate-700 font-medium ${item.checked ? 'line-through text-slate-400' : ''}">${item.name}</span>
-                        <button onclick="removeItem(${item.id})" class="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 transition-all">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                        </button>
-                    </div>
-                `;
-
-                if (item.checked) {
-                    content += `
-                        <div class="flex items-center gap-4 mt-4 pt-4 border-t border-slate-200/60">
-                            <div class="flex-1">
-                                <label class="text-[10px] text-slate-400 font-bold uppercase block mb-1">Preço Unit.</label>
-                                <div class="relative">
-                                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">R$</span>
-                                    <input 
-                                        type="number" 
-                                        step="0.01" 
-                                        value="${item.price || ''}" 
-                                        oninput="updatePrice(${item.id}, this.value)"
-                                        class="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                                        placeholder="0,00"
-                                    >
-                                </div>
-                            </div>
-                            <div class="w-20 text-center">
-                                <label class="text-[10px] text-slate-400 font-bold uppercase block mb-1">Qtd</label>
-                                <input 
-                                    type="number" 
-                                    value="${item.quantity}" 
-                                    oninput="updateQty(${item.id}, this.value)"
-                                    class="w-full text-center py-2 text-sm outline-none font-medium border border-slate-200 rounded-lg"
-                                    min="1"
-                                >
-                            </div>
-                            <div class="text-right min-w-[70px]">
-                                <label class="text-[10px] text-slate-400 font-bold uppercase block mb-1">Subtotal</label>
-                                <span class="text-sm font-bold text-slate-700">R$ ${(item.price * item.quantity).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
-                            </div>
-                        </div>
-                    `;
-                }
-
-                card.innerHTML = content;
-                listContainer.appendChild(card);
-            });
-            updateTotals();
-            if (currentTab === 'table') renderTable();
-        }
-
-        // Inicializa com ordenação
-        sortItems();
-        render();
-    </script>
 </body>
 </html>
