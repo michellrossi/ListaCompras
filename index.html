@@ -61,15 +61,24 @@
         const currentListNameEl = document.getElementById('current-list-name');
         const setupInstructions = document.getElementById('setup-instructions');
         const mainContent = document.getElementById('main-content');
+        const toast = document.getElementById('toast');
+
+        // --- Sistema de Notificação (Toast) ---
+        function showToast(message, type = 'error') {
+            toast.innerText = message;
+            toast.className = `fixed top-6 left-1/2 -translate-x-1/2 z-[200] px-6 py-3 rounded-2xl shadow-2xl font-bold text-sm transition-all duration-300 animate-slide-up ${type === 'error' ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white'}`;
+            toast.classList.remove('hidden');
+            setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 3000);
+        }
 
         // --- Gestão de Autenticação ---
         async function initAuth() {
             try {
-                // Tenta entrar anonimamente para garantir persistência na nuvem
                 await signInAnonymously(auth);
             } catch (error) {
                 console.error("Erro na autenticação Firebase:", error);
-                // Se o erro for 'auth/configuration-not-found', mostramos o guia de configuração
                 if (error.code === 'auth/configuration-not-found' || error.message.includes('auth/configuration-not-found')) {
                     mainContent.classList.add('opacity-20', 'pointer-events-none');
                     setupInstructions.classList.remove('hidden');
@@ -80,7 +89,6 @@
         onAuthStateChanged(auth, (u) => {
             user = u;
             if (user) {
-                // Se logado com sucesso, esconde instruções e inicia sincronização
                 setupInstructions.classList.add('hidden');
                 mainContent.classList.remove('opacity-20', 'pointer-events-none');
                 setupRealtimeSync();
@@ -90,8 +98,6 @@
         // --- Sincronização em Tempo Real ---
         function setupRealtimeSync() {
             if (!user) return;
-
-            // Caminho obrigatório: /artifacts/{appId}/public/data/{collectionName}
             const listsCollection = collection(db, 'artifacts', appId, 'public', 'data', 'shoppingLists');
             
             onSnapshot(listsCollection, (snapshot) => {
@@ -106,7 +112,6 @@
                 }
             }, (error) => {
                 console.error("Erro no Firestore Snapshot:", error);
-                alert("Erro ao ler dados: Verifique se as Regras de Segurança do Firestore estão configuradas para permitir leitura/escrita pública no caminho do projeto.");
             });
         }
 
@@ -167,7 +172,7 @@
 
         window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
 
-        // --- Renderização de Listas e Tabelas ---
+        // --- Renderização ---
         function renderManager() {
             const container = document.getElementById('manager-list-container');
             if (!container) return;
@@ -199,7 +204,6 @@
             currentListNameEl.innerText = list.name + (list.isMother ? ' (Lista Mãe)' : '');
             const items = list.items || [];
 
-            // Ordenação: Itens não marcados em cima, marcados em baixo. Ambos em ordem alfabética.
             items.sort((a, b) => {
                 if (a.checked !== b.checked) return a.checked ? 1 : -1;
                 return a.name.localeCompare(b.name, 'pt-PT');
@@ -267,6 +271,15 @@
             const name = input.value.trim();
             if (name && currentListId) {
                 const list = lists.find(l => l.id === currentListId);
+                
+                // Validação de Duplicidade
+                const exists = list.items?.some(i => i.name.toLowerCase() === name.toLowerCase());
+                if (exists) {
+                    showToast(`"${name}" já está nesta lista!`);
+                    input.value = '';
+                    return;
+                }
+
                 const newItems = [...(list.items || []), { id: Date.now().toString() + Math.random(), name, price: 0, quantity: 1, format: '', checked: false }];
                 input.value = '';
                 await updateCurrentListItems(newItems);
@@ -355,16 +368,27 @@
         window.confirmImportAction = async () => {
             const current = lists.find(l => l.id === currentListId);
             const newItems = [...(current.items || [])];
+            let importedCount = 0;
+
             (window.importSelection || []).forEach(item => {
-                newItems.push({ 
-                    ...item, 
-                    id: Date.now().toString() + Math.random(), 
-                    checked: false, 
-                    price: 0, 
-                    quantity: 1 
-                });
+                // Validação extra na importação
+                if (!newItems.some(i => i.name.toLowerCase() === item.name.toLowerCase())) {
+                    newItems.push({ 
+                        ...item, 
+                        id: Date.now().toString() + Math.random(), 
+                        checked: false, 
+                        price: 0, 
+                        quantity: 1 
+                    });
+                    importedCount++;
+                }
             });
-            await updateCurrentListItems(newItems);
+
+            if (importedCount > 0) {
+                await updateCurrentListItems(newItems);
+            } else {
+                showToast("Nenhum item novo foi importado.");
+            }
             window.closeModal('modal-mother');
         };
 
@@ -372,7 +396,6 @@
             if (confirm("Deseja realmente esvaziar esta lista inteira?")) await updateCurrentListItems([]);
         };
 
-        // Inicia o processo de autenticação
         initAuth();
 
     </script>
@@ -386,12 +409,14 @@
         .tab-active { color: #10b981; border-bottom: 2px solid #10b981; }
         .modal-overlay { background-color: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); }
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        /* Animações simples */
-        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-        .animate-slide-up { animation: slideUp 0.3s ease-out; }
+        @keyframes slideUp { from { transform: translate(-50%, 100%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+        .animate-slide-up { animation: slideUp 0.3s ease-out forwards; }
     </style>
 </head>
 <body class="min-h-screen pb-32 bg-slate-50 text-slate-900 selection:bg-emerald-100">
+
+    <!-- Notificação Toast -->
+    <div id="toast" class="hidden"></div>
 
     <!-- Guia de Erro de Configuração (Firebase) -->
     <div id="setup-instructions" class="hidden fixed inset-0 z-[200] bg-white flex items-center justify-center p-6 text-center">
