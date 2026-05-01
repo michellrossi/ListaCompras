@@ -52,6 +52,7 @@
         // Estado Global da Aplicação
         let lists = [];
         let currentListId = null;
+        let listToRenameId = null;
         let user = null;
 
         // Referências do DOM
@@ -155,6 +156,13 @@
             }
         }
 
+        async function renameList(id, newName) {
+            if (!user || !id || !newName) return;
+            const listDoc = doc(db, 'artifacts', appId, 'public', 'data', 'shoppingLists', id);
+            await updateDoc(listDoc, { name: newName });
+            showToast("Lista renomeada com sucesso!", "success");
+        }
+
         // --- Lógica de Interface ---
         window.switchTab = (tab) => {
             window.currentTab = tab;
@@ -180,18 +188,23 @@
             lists.forEach(l => {
                 const isActive = l.id === currentListId;
                 const div = document.createElement('div');
-                div.className = `flex items-center gap-3 p-4 rounded-2xl border transition-all ${isActive ? 'border-emerald-500 bg-emerald-50 shadow-inner' : 'border-slate-100 bg-white'}`;
+                div.className = `flex items-center gap-2 p-3 rounded-2xl border transition-all ${isActive ? 'border-emerald-500 bg-emerald-50 shadow-inner' : 'border-slate-100 bg-white'}`;
                 div.innerHTML = `
-                    <div class="flex-1 cursor-pointer" onclick="selectList('${l.id}')">
-                        <p class="font-bold text-slate-800">${l.name} ${l.isMother ? '⭐' : ''}</p>
-                        <p class="text-xs text-slate-500">${l.items?.length || 0} itens registados</p>
+                    <div class="flex-1 cursor-pointer overflow-hidden" onclick="selectList('${l.id}')">
+                        <p class="font-bold text-slate-800 truncate">${l.name} ${l.isMother ? '⭐' : ''}</p>
+                        <p class="text-[10px] text-slate-500 font-medium uppercase tracking-tight">${l.items?.length || 0} itens registados</p>
                     </div>
-                    <button onclick="setMotherList('${l.id}')" class="p-2.5 rounded-xl ${l.isMother ? 'text-amber-500 bg-amber-50' : 'text-slate-300 hover:bg-slate-50'}">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="${l.isMother ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-                    </button>
-                    <button onclick="deleteListAction('${l.id}')" class="p-2.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                    </button>
+                    <div class="flex items-center gap-1">
+                        <button onclick="openRenameModalAction('${l.id}', '${l.name}')" class="p-2 rounded-xl text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 transition-all">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                        </button>
+                        <button onclick="setMotherList('${l.id}')" class="p-2 rounded-xl ${l.isMother ? 'text-amber-500 bg-amber-50' : 'text-slate-300 hover:bg-slate-50'} transition-all">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="${l.isMother ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                        </button>
+                        <button onclick="deleteListAction('${l.id}')" class="p-2 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        </button>
+                    </div>
                 `;
                 container.appendChild(div);
             });
@@ -321,6 +334,21 @@
 
         window.setMotherList = async (id) => await setAsMother(id);
         window.deleteListAction = async (id) => await deleteList(id);
+
+        window.openRenameModalAction = (id, name) => {
+            listToRenameId = id;
+            document.getElementById('rename-list-input').value = name;
+            document.getElementById('modal-rename').classList.remove('hidden');
+        };
+
+        window.confirmRenameAction = async (e) => {
+            e.preventDefault();
+            const newName = document.getElementById('rename-list-input').value.trim();
+            if (newName && listToRenameId) {
+                await renameList(listToRenameId, newName);
+                window.closeModal('modal-rename');
+            }
+        };
 
         window.createNewListAction = async (e) => {
             e.preventDefault();
@@ -499,6 +527,7 @@
     </div>
 
     <!-- Modais -->
+    <!-- Gerenciador de Listas -->
     <div id="modal-manager" class="fixed inset-0 z-[60] modal-overlay hidden flex items-end sm:items-center justify-center p-4">
         <div class="bg-white w-full max-w-md rounded-t-[3rem] sm:rounded-[3rem] p-8 shadow-2xl animate-slide-up">
             <div class="flex justify-between items-center mb-8">
@@ -507,12 +536,27 @@
             </div>
             <div id="manager-list-container" class="space-y-4 mb-8 max-h-[50vh] overflow-y-auto pr-2 no-scrollbar"></div>
             <form onsubmit="createNewListAction(event)" class="flex gap-3 pt-8 border-t border-slate-100">
-                <input type="text" id="new-list-name" placeholder="Nome da lista..." class="flex-1 bg-slate-50 rounded-[1.5rem] px-5 py-4 outline-none border border-transparent focus:border-emerald-500 transition-all font-medium">
-                <button type="submit" class="bg-emerald-500 text-white px-6 py-4 rounded-[1.5rem] font-black shadow-xl shadow-emerald-100">CRIAR</button>
+                <input type="text" id="new-list-name" placeholder="Nome da lista..." class="flex-1 bg-slate-50 rounded-[1.5rem] px-5 py-4 outline-none border border-transparent focus:border-emerald-500 transition-all font-medium text-sm">
+                <button type="submit" class="bg-emerald-500 text-white px-6 py-4 rounded-[1.5rem] font-black shadow-xl shadow-emerald-100 uppercase text-xs tracking-widest">CRIAR</button>
             </form>
         </div>
     </div>
 
+    <!-- Renomear Lista -->
+    <div id="modal-rename" class="fixed inset-0 z-[70] modal-overlay hidden flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in-95 duration-200">
+            <h2 class="text-xl font-black text-slate-800 mb-6">Renomear Lista</h2>
+            <form onsubmit="confirmRenameAction(event)">
+                <input type="text" id="rename-list-input" placeholder="Novo nome..." class="w-full bg-slate-50 rounded-2xl px-5 py-4 mb-8 outline-none border border-transparent focus:border-emerald-500 transition-all font-medium">
+                <div class="flex gap-3">
+                    <button type="button" onclick="closeModal('modal-rename')" class="flex-1 py-4 rounded-2xl bg-slate-100 font-bold text-slate-500 hover:bg-slate-200 transition-colors">CANCELAR</button>
+                    <button type="submit" class="flex-1 py-4 rounded-2xl bg-emerald-500 font-bold text-white shadow-lg shadow-emerald-200 hover:bg-emerald-600 transition-colors">GUARDAR</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Importar Itens -->
     <div id="modal-mother" class="fixed inset-0 z-[60] modal-overlay hidden flex items-center justify-center p-4">
         <div class="bg-white w-full max-w-md rounded-[3rem] p-8 shadow-2xl animate-in zoom-in-95 duration-300">
             <h2 class="text-2xl font-black text-slate-800 mb-2">Importar Itens</h2>
