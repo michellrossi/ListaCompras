@@ -54,10 +54,14 @@ export function useShoppingLists() {
       setLists(fetchedLists);
       
       if (fetchedLists.length === 0) {
-        // We shouldn't create default here infinitely, so create explicit list.
         createNewList("Minha Primeira Lista", true);
-      } else if (!currentListId || !fetchedLists.find(l => l.id === currentListId)) {
-        setCurrentListId(fetchedLists[0].id);
+      } else {
+        setCurrentListId((prev) => {
+          if (!prev || !fetchedLists.find(l => l.id === prev)) {
+            return fetchedLists[0].id;
+          }
+          return prev;
+        });
       }
       setLoading(false);
     }, (err) => {
