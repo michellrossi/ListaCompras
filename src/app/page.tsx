@@ -30,6 +30,7 @@ export default function Home() {
   const [renameInput, setRenameInput] = useState("");
   const [newListInput, setNewListInput] = useState("");
   const [itemInput, setItemInput] = useState("");
+  const [motherSearch, setMotherSearch] = useState("");
   
   const [importSelection, setImportSelection] = useState<Set<string>>(new Set());
 
@@ -184,6 +185,7 @@ export default function Home() {
                 if (!motherList) return alert("Defina uma lista como Mãe (⭐) primeiro.");
                 if (motherList.id === currentListId) return alert("Já está a visualizar a Lista Mãe.");
                 setImportSelection(new Set());
+                setMotherSearch("");
                 setIsMotherOpen(true);
               }} title="Importar da Lista Mãe" className="bg-white border border-slate-200 p-4 rounded-[1.5rem] shadow-sm text-slate-600 hover:bg-slate-50 transition-colors active:scale-90">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
@@ -302,7 +304,7 @@ export default function Home() {
       )}
 
       {isRenameOpen && (
-        <div className="fixed inset-0 z-[70] modal-overlay flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[70] modal-overlay flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) setIsRenameOpen(false); }}>
           <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl animate-slide-in">
             <h2 className="text-xl font-black text-slate-800 mb-6">Renomear Lista</h2>
             <form onSubmit={async (e) => { e.preventDefault(); if (renameInput && listToRenameId) { await renameList(listToRenameId, renameInput); setIsRenameOpen(false); } }}>
@@ -317,12 +319,25 @@ export default function Home() {
       )}
 
       {isMotherOpen && motherList && (
-        <div className="fixed inset-0 z-[60] modal-overlay flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[60] modal-overlay flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) setIsMotherOpen(false); }}>
           <div className="bg-white w-full max-w-md rounded-[3rem] p-8 shadow-2xl animate-slide-in">
             <h2 className="text-2xl font-black text-slate-800 mb-2">Importar Itens</h2>
-            <p className="text-slate-400 font-medium text-sm mb-8 italic">Selecione referências da sua Lista Mãe:</p>
+            <p className="text-slate-400 font-medium text-sm mb-4 italic">Selecione referências da sua Lista Mãe:</p>
+            
+            <input 
+              type="text" 
+              value={motherSearch} 
+              onChange={(e) => setMotherSearch(e.target.value)} 
+              placeholder="Buscar itens..." 
+              className="w-full bg-slate-50 rounded-2xl px-5 py-4 mb-4 outline-none border border-transparent focus:border-emerald-500 transition-all font-medium text-sm" 
+            />
+
             <div className="space-y-3 max-h-[45vh] overflow-y-auto pr-1 no-scrollbar mb-10">
-              {motherList.items.map(item => {
+              {motherList.items.filter(item => {
+                if (!item || !item.name) return false;
+                const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+                return normalize(item.name).includes(normalize(motherSearch || ""));
+              }).map(item => {
                 const alreadyHas = currentList?.items.some(i => i.name.toLowerCase() === item.name.toLowerCase());
                 return (
                   <div key={item.id} className={`flex items-center justify-between p-4 rounded-2xl border ${alreadyHas ? 'bg-slate-50 opacity-40' : 'bg-white border-slate-100 hover:border-emerald-200'}`}>

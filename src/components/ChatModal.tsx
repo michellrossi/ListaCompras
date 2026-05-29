@@ -68,7 +68,7 @@ export default function ChatModal({ isOpen, onClose, allLists, currentListId }: 
   };
 
   return (
-    <div className="fixed inset-0 z-[80] modal-overlay flex items-center justify-center p-4 animate-slide-in">
+    <div className="fixed inset-0 z-[80] modal-overlay flex items-center justify-center p-4 animate-slide-in" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="bg-white w-full max-w-lg rounded-[2.5rem] p-6 shadow-2xl flex flex-col h-[70vh]">
         <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-2">
