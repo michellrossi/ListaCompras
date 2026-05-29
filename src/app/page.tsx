@@ -341,7 +341,7 @@ export default function Home() {
         </div>
       )}
 
-      <ChatModal isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} listItems={currentList?.items || []} />
+      <ChatModal isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} allLists={lists} currentListId={currentListId} />
     </>
   );
 }

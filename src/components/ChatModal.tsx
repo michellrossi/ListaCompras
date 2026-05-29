@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from "react";
-import { ShoppingItem } from "@/hooks/useShoppingLists";
+import { ShoppingList } from "@/hooks/useShoppingLists";
 
 type ChatModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  listItems: ShoppingItem[];
+  allLists: ShoppingList[];
+  currentListId: string | null;
 };
 
 type Message = {
@@ -12,7 +13,7 @@ type Message = {
   text: string;
 };
 
-export default function ChatModal({ isOpen, onClose, listItems }: ChatModalProps) {
+export default function ChatModal({ isOpen, onClose, allLists, currentListId }: ChatModalProps) {
   const [messages, setMessages] = useState<Message[]>([
     { role: "ai", text: "Olá! Sou seu assistente de compras. Como posso ajudar com sua lista hoje?" }
   ]);
@@ -41,7 +42,14 @@ export default function ChatModal({ isOpen, onClose, listItems }: ChatModalProps
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: userMessage,
-          context: listItems.map(i => ({ nome: i.name, preco: i.price, quantidade: i.quantity, formato: i.format }))
+          context: {
+            listas: allLists.map(l => ({
+              id: l.id,
+              nomeDaLista: l.name,
+              listaAtual: l.id === currentListId,
+              itens: l.items.map(i => ({ nome: i.name, preco: i.price, quantidade: i.quantity, formato: i.format }))
+            }))
+          }
         }),
       });
 

@@ -18,10 +18,10 @@ export async function POST(req: Request) {
     const { prompt, context } = await req.json();
 
     const fullPrompt = `Você é um assistente inteligente de compras. 
-Abaixo está a lista de compras atual do usuário em formato JSON:
+Abaixo estão todas as listas de compras do usuário em formato JSON (indicando qual é a lista atual visualizada no momento):
 ${JSON.stringify(context, null, 2)}
 
-Responda de forma amigável, concisa e útil à seguinte pergunta do usuário, baseando-se SOMENTE na lista fornecida ou em conhecimentos gerais de culinária e economia compatíveis com os itens. Não invente itens que não estão na lista.
+Responda de forma amigável, concisa e útil à seguinte pergunta do usuário, baseando-se SOMENTE nas listas fornecidas ou em conhecimentos gerais de culinária e economia compatíveis com os itens das listas. Não invente itens que não estão nas listas.
 Pergunta do Usuário: ${prompt}`;
 
     const result = await model.generateContent(fullPrompt);
