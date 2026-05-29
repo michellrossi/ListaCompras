@@ -333,11 +333,13 @@ export default function Home() {
             />
 
             <div className="space-y-3 max-h-[45vh] overflow-y-auto pr-1 no-scrollbar mb-10">
-              {motherList.items.filter(item => {
+              {[...motherList.items].filter(item => {
                 if (!item || !item.name) return false;
                 const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
                 return normalize(item.name).includes(normalize(motherSearch || ""));
-              }).map(item => {
+              })
+              .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+              .map(item => {
                 const alreadyHas = currentList?.items.some(i => i.name.toLowerCase() === item.name.toLowerCase());
                 return (
                   <div key={item.id} className={`flex items-center justify-between p-4 rounded-2xl border ${alreadyHas ? 'bg-slate-50 opacity-40' : 'bg-white border-slate-100 hover:border-emerald-200'}`}>
