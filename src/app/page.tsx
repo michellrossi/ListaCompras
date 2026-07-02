@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useShoppingLists } from "@/hooks/useShoppingLists";
 import ChatModal from "@/components/ChatModal";
+import ShoppingItemRow from "@/components/ShoppingItemRow";
 
 export default function Home() {
   const {
@@ -39,6 +40,60 @@ export default function Home() {
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  // Backup handlers
+  const handleDownloadJSON = () => {
+    try {
+      const dataStr = JSON.stringify(lists, null, 2);
+      const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+      
+      const exportFileDefaultName = `backup_shopping_lists_${new Date().toISOString().split('T')[0]}.json`;
+      
+      const linkElement = document.createElement('a');
+      linkElement.setAttribute('href', dataUri);
+      linkElement.setAttribute('download', exportFileDefaultName);
+      linkElement.click();
+      showToast("Backup JSON iniciado!");
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao gerar JSON de backup.");
+    }
+  };
+
+  const handleDownloadCSV = () => {
+    try {
+      // Headers
+      let csvContent = "Lista,Item,Formato,Preco,Quantidade,Comprado,ListaMae\n";
+      
+      lists.forEach(list => {
+        const isMotherStr = list.isMother ? "Sim" : "Nao";
+        if (list.items && list.items.length > 0) {
+          list.items.forEach(item => {
+            const name = item.name.replace(/"/g, '""');
+            const format = (item.format || "").replace(/"/g, '""');
+            const price = item.price || 0;
+            const quantity = item.quantity || 1;
+            const checked = item.checked ? "Sim" : "Nao";
+            csvContent += `"${list.name}","${name}","${format}",${price},${quantity},"${checked}","${isMotherStr}"\n`;
+          });
+        } else {
+          csvContent += `"${list.name}","","","","","","${isMotherStr}"\n`;
+        }
+      });
+
+      const dataUri = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(csvContent);
+      const exportFileDefaultName = `backup_shopping_lists_${new Date().toISOString().split('T')[0]}.csv`;
+      
+      const linkElement = document.createElement('a');
+      linkElement.setAttribute('href', dataUri);
+      linkElement.setAttribute('download', exportFileDefaultName);
+      linkElement.click();
+      showToast("Backup CSV iniciado!");
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao gerar CSV de backup.");
+    }
   };
 
   if (loading && !authError) {
@@ -194,38 +249,18 @@ export default function Home() {
             
             <div className="space-y-4">
               {sortedItems.map(item => (
-                <div key={item.id} className={`item-card p-4 rounded-2xl border flex flex-col gap-3 ${item.checked ? 'bg-slate-50 border-slate-200' : 'bg-white border-slate-200 shadow-sm'}`}>
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => handleToggleItem(item.id)} className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all ${item.checked ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300'}`}>
-                      {item.checked && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4"><polyline points="20 6 9 17 4 12"></polyline></svg>}
-                    </button>
-                    <div className="flex-1">
-                      <p className={`text-sm font-semibold text-slate-800 ${item.checked ? 'line-through text-slate-400' : ''}`}>{item.name}</p>
-                      <input type="text" value={item.format || ''} onChange={(e) => handleUpdateField(item.id, 'format', e.target.value)} placeholder="Formato (ex: 1kg, 500ml)" className="text-[10px] bg-transparent border-none p-0 outline-none text-slate-400 w-full font-bold uppercase placeholder:text-slate-200" />
-                    </div>
-                    <button onClick={() => handleRemoveItem(item.id)} className="text-slate-300 hover:text-red-400 p-1"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
-                  </div>
-                  {item.checked && (
-                    <div className="flex items-center gap-4 pt-3 border-t border-slate-200/50">
-                      <div className="flex-1">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Preço Unit.</label>
-                        <input type="number" step="0.01" value={item.price || ''} onChange={(e) => handleUpdateField(item.id, 'price', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-sm outline-none focus:border-emerald-400" />
-                      </div>
-                      <div className="w-20">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter text-center block">Qtd</label>
-                        <input type="number" value={item.quantity || 1} onChange={(e) => handleUpdateField(item.id, 'quantity', e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-2 py-1.5 text-sm text-center outline-none focus:border-emerald-400" />
-                      </div>
-                      <div className="text-right min-w-[80px]">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">Subtotal</label>
-                        <p className="text-sm font-black text-slate-800">R$ {((item.price || 0) * (item.quantity || 1)).toLocaleString('pt-PT', { minimumFractionDigits: 2 })}</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <ShoppingItemRow
+                  key={item.id}
+                  item={item}
+                  handleToggleItem={handleToggleItem}
+                  handleUpdateField={handleUpdateField}
+                  handleRemoveItem={handleRemoveItem}
+                />
               ))}
             </div>
           </div>
         )}
+
 
         {currentTab === 'table' && (
           <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
@@ -299,6 +334,24 @@ export default function Home() {
               <input type="text" value={newListInput} onChange={(e) => setNewListInput(e.target.value)} placeholder="Nome da lista..." className="flex-1 bg-slate-50 rounded-[1.5rem] px-5 py-4 outline-none border border-transparent focus:border-emerald-500 transition-all font-medium text-sm" />
               <button type="submit" className="bg-emerald-500 text-white px-6 py-4 rounded-[1.5rem] font-black shadow-xl shadow-emerald-100 uppercase text-xs tracking-widest">CRIAR</button>
             </form>
+            
+            <div className="mt-8 pt-6 border-t border-slate-100">
+              <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-3">Backup de Dados</p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={handleDownloadJSON}
+                  className="flex-1 py-3 px-4 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-95"
+                >
+                  📥 JSON
+                </button>
+                <button 
+                  onClick={handleDownloadCSV}
+                  className="flex-1 py-3 px-4 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-95"
+                >
+                  📥 CSV
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
